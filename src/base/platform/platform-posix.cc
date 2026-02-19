@@ -165,6 +165,7 @@ void* Allocate(void* hint, size_t size, OS::MemoryPermission access,
   int prot = GetProtectionFromMemoryPermission(access);
   int flags = GetFlagsForMemoryPermission(access, page_type);
   void* result = mmap(hint, size, prot, flags, kMmapFd, kMmapFdOffset);
+  __fuzzer_on_memory_layout_changed();
   if (result == MAP_FAILED) return nullptr;
 
 #if V8_OS_LINUX && V8_ENABLE_PRIVATE_MAPPING_FORK_OPTIMIZATION
@@ -462,6 +463,7 @@ void OS::Free(void* address, size_t size) {
   DCHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % AllocatePageSize());
   DCHECK_EQ(0, size % AllocatePageSize());
   CHECK_EQ(0, munmap(address, size));
+  __fuzzer_on_memory_layout_changed();
 }
 
 // Darwin specific implementation in platform-darwin.cc.
@@ -473,6 +475,7 @@ void* OS::AllocateShared(void* hint, size_t size, MemoryPermission access,
   int prot = GetProtectionFromMemoryPermission(access);
   int fd = FileDescriptorFromSharedMemoryHandle(handle);
   void* result = mmap(hint, size, prot, MAP_SHARED, fd, offset);
+  __fuzzer_on_memory_layout_changed();
   if (result == MAP_FAILED) return nullptr;
   return result;
 }
@@ -482,6 +485,7 @@ void* OS::AllocateShared(void* hint, size_t size, MemoryPermission access,
 void OS::FreeShared(void* address, size_t size) {
   DCHECK_EQ(0, size % AllocatePageSize());
   CHECK_EQ(0, munmap(address, size));
+  __fuzzer_on_memory_layout_changed();
 }
 
 // static
@@ -489,6 +493,7 @@ void OS::Release(void* address, size_t size) {
   DCHECK_EQ(0, reinterpret_cast<uintptr_t>(address) % CommitPageSize());
   DCHECK_EQ(0, size % CommitPageSize());
   CHECK_EQ(0, munmap(address, size));
+  __fuzzer_on_memory_layout_changed();
 }
 
 // static
@@ -498,6 +503,9 @@ bool OS::SetPermissions(void* address, size_t size, MemoryPermission access) {
 
   int prot = GetProtectionFromMemoryPermission(access);
   int ret = mprotect(address, size, prot);
+  if (ret == 0) {
+    __fuzzer_on_memory_layout_changed();
+  }
 
   // Setting permissions can fail if the limit of VMAs is exceeded.
   // Any failure that's not OOM likely indicates a bug in the caller (e.g.
@@ -543,6 +551,7 @@ void OS::SetDataReadOnly(void* address, size_t size) {
     FATAL("Failed to protect data memory at %p +%zu; error %d\n", address, size,
           errno);
   }
+  __fuzzer_on_memory_layout_changed();
 }
 
 // static
@@ -606,6 +615,7 @@ bool OS::DecommitPages(void* address, size_t size) {
   // zero-initialized on next access.
   void* ret = mmap(address, size, PROT_NONE,
                    MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE, -1, 0);
+  __fuzzer_on_memory_layout_changed();
   if (V8_UNLIKELY(ret == MAP_FAILED)) {
     // Decommitting pages can fail if the limit of VMAs is exceeded.
     CHECK_EQ(ENOMEM, errno);
@@ -803,6 +813,7 @@ OS::MemoryMappedFile* OS::MemoryMappedFile::open(const char* name,
           }
           void* const memory =
               mmap(OS::GetRandomMmapAddr(), size, prot, flags, fileno(file), 0);
+          __fuzzer_on_memory_layout_changed();
           if (memory != MAP_FAILED) {
             return new PosixMemoryMappedFile(file, memory, size);
           }
@@ -823,6 +834,7 @@ OS::MemoryMappedFile* OS::MemoryMappedFile::create(const char* name,
     if (result == size && !ferror(file)) {
       void* memory = mmap(OS::GetRandomMmapAddr(), result,
                           PROT_READ | PROT_WRITE, MAP_SHARED, fileno(file), 0);
+      __fuzzer_on_memory_layout_changed();
       if (memory != MAP_FAILED) {
         return new PosixMemoryMappedFile(file, memory, result);
       }
@@ -1103,15 +1115,19 @@ bool AddressSpaceReservation::AllocateShared(void* address, size_t size,
   DCHECK(Contains(address, size));
   int prot = GetProtectionFromMemoryPermission(access);
   int fd = FileDescriptorFromSharedMemoryHandle(handle);
-  return mmap(address, size, prot, MAP_SHARED | MAP_FIXED, fd, offset) !=
+  bool ret = mmap(address, size, prot, MAP_SHARED | MAP_FIXED, fd, offset) !=
          MAP_FAILED;
+  __fuzzer_on_memory_layout_changed();
+  return ret;
 }
 #endif  // !defined(V8_OS_DARWIN)
 
 bool AddressSpaceReservation::FreeShared(void* address, size_t size) {
   DCHECK(Contains(address, size));
-  return mmap(address, size, PROT_NONE, MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE,
+  bool ret = mmap(address, size, PROT_NONE, MAP_FIXED | MAP_ANONYMOUS | MAP_PRIVATE,
               -1, 0) == address;
+  __fuzzer_on_memory_layout_changed();
+  return ret;
 }
 #endif  // !V8_OS_ZOS
 

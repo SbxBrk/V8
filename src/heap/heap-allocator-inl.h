@@ -17,6 +17,8 @@
 #include "src/heap/read-only-spaces.h"
 #include "src/heap/zapping.h"
 
+extern "C" void __fuzzer_on_heap_allocation(intptr_t, size_t, uint8_t);
+
 namespace v8 {
 namespace internal {
 
@@ -154,6 +156,9 @@ V8_WARN_UNUSED_RESULT V8_INLINE AllocationResult HeapAllocator::AllocateRaw(
   }
 
   if (allocation.To(&object)) {
+    // Report the allocation to the fuzzer.
+    __fuzzer_on_heap_allocation(object.address(), size_in_bytes, static_cast<uint8_t>(type));
+
     if (heap::ShouldZapGarbage() && AllocationType::kCode == type) {
       heap::ZapCodeBlock(object.address(), size_in_bytes);
     }

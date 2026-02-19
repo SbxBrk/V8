@@ -104,6 +104,8 @@ namespace internal {
 #endif
 
 #define BUILTIN_LIST_BASE_TIER1(CPP, TSJ, TFJ, TSC, TFC, TFS, TFH, ASM)        \
+  /* Fuzzing builtins */                                                       \
+  CPP(GlobalFuzzerInjectionPoint, kDontAdaptArgumentsSentinel)                 \
   /* GC write barriers */                                                      \
   TFC(IndirectPointerBarrierSaveFP, IndirectPointerWriteBarrier)               \
   TFC(IndirectPointerBarrierIgnoreFP, IndirectPointerWriteBarrier)             \

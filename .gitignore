@@ -130,3 +130,9 @@ bazel-bin
 bazel-out
 bazel-testlogs
 bazel-v8
+
+# Build artifacts (previously covered by root .gitignore)
+.cipd/
+.gclient
+.gclient*
+.gcs_entries

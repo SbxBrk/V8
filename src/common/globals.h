@@ -541,6 +541,9 @@ using AtomicTagged_t = base::AtomicWord;
 
 #endif  // V8_COMPRESS_POINTERS
 
+// Hard coded in fuzzer runtime.
+static_assert(kTaggedSize == kInt32Size);
+
 //
 // JavaScript Dispatch Table
 //

@@ -24,10 +24,10 @@ namespace platform {
 namespace {
 
 void PrintStackTrace() {
-  v8::base::debug::StackTrace trace;
-  trace.Print();
-  // Avoid dumping duplicate stack trace on abort signal.
-  v8::base::debug::DisableSignalStackDump();
+//   v8::base::debug::StackTrace trace;
+//   trace.Print();
+//   // Avoid dumping duplicate stack trace on abort signal.
+   v8::base::debug::DisableSignalStackDump();
 }
 
 constexpr int kMaxThreadPoolSize = 16;

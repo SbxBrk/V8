@@ -10,6 +10,7 @@
 #include "src/base/hashmap.h"
 #include "src/base/ieee754.h"
 #include "src/builtins/accessors.h"
+#include "src/builtins/builtins.h"
 #include "src/codegen/compiler.h"
 #include "src/common/globals.h"
 #include "src/debug/debug.h"
@@ -88,6 +89,8 @@
 #if V8_ENABLE_WEBASSEMBLY
 #include "src/wasm/wasm-js.h"
 #endif  // V8_ENABLE_WEBASSEMBLY
+
+extern "C" void __fuzzer_report_global_this_offset(size_t);
 
 namespace v8 {
 namespace internal {
@@ -6136,6 +6139,9 @@ bool Genesis::InstallABunchOfRandomThings() {
   DirectHandle<JSGlobalObject> global_object(native_context()->global_object(),
                                              isolate());
 
+ InstallFunctionWithBuiltinId(isolate(), global_object, "FuzzerInjectionPoint",
+                              Builtin::kGlobalFuzzerInjectionPoint, 1, kDontAdapt);
+
   // Install Global.decodeURI.
   InstallFunctionWithBuiltinId(isolate(), global_object, "decodeURI",
                                Builtin::kGlobalDecodeURI, 1, kDontAdapt);
@@ -6780,6 +6786,10 @@ bool Genesis::ConfigureGlobalObject(
 
   native_context()->set_array_buffer_map(
       native_context()->array_buffer_fun()->initial_map());
+
+  Tagged<HeapObject> global_proxy_tag = Cast<HeapObject>(*global_proxy);
+  uint32_t global_proxy_addr = static_cast<uint32_t>(global_proxy_tag->address());
+  __fuzzer_report_global_this_offset((size_t)global_proxy_addr);
 
   return true;
 }

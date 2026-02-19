@@ -59,7 +59,51 @@ class StackArgumentsAccessor {
 class V8_EXPORT_PRIVATE MacroAssembler
     : public SharedMacroAssembler<MacroAssembler> {
  public:
-  using SharedMacroAssembler<MacroAssembler>::SharedMacroAssembler;
+  //using SharedMacroAssembler<MacroAssembler>::SharedMacroAssembler;
+
+  // Overriding the first constructor.
+  MacroAssembler(Isolate* isolate, CodeObjectRequired create_code_object,
+                        std::unique_ptr<AssemblerBuffer> buffer = {})
+      : SharedMacroAssembler<MacroAssembler>(isolate, create_code_object, std::move(buffer)) {
+    this->init();
+  }
+
+  // Overriding the second constructor.
+  MacroAssembler(Isolate* isolate, MaybeAssemblerZone zone,
+                        CodeObjectRequired create_code_object,
+                        std::unique_ptr<AssemblerBuffer> buffer = {})
+      : SharedMacroAssembler<MacroAssembler>(isolate, zone, create_code_object, std::move(buffer)) {
+    this->init();
+  }
+
+  // Overriding the third constructor.
+  MacroAssembler(Isolate* isolate, const AssemblerOptions& options,
+                        CodeObjectRequired create_code_object,
+                        std::unique_ptr<AssemblerBuffer> buffer = {})
+      : SharedMacroAssembler<MacroAssembler>(isolate, options, create_code_object, std::move(buffer)) {
+    this->init();
+  }
+
+  // Overriding the fourth constructor.
+  MacroAssembler(Isolate* isolate, MaybeAssemblerZone zone,
+                        AssemblerOptions options,
+                        CodeObjectRequired create_code_object,
+                        std::unique_ptr<AssemblerBuffer> buffer = {})
+      : SharedMacroAssembler<MacroAssembler>(isolate, zone, options, create_code_object, std::move(buffer)) {
+    this->init();
+  }
+
+  // Overriding the isolate-less constructor.
+  MacroAssembler(MaybeAssemblerZone zone, AssemblerOptions options,
+                        CodeObjectRequired create_code_object,
+                        std::unique_ptr<AssemblerBuffer> buffer = {})
+      : SharedMacroAssembler<MacroAssembler>(zone, options, create_code_object, std::move(buffer)) {
+    this->init();
+  }
+
+  void init() {
+    fuzzer_before_load_root_reg_offset = RootRegisterOffsetForExternalReferenceTableEntry(isolate(), ExternalReference::fuzzer_before_heap_sandbox_load_preserve());
+  }
 
   void PushReturnAddressFrom(Register src) { pushq(src); }
   void PopReturnAddressTo(Register dst) { popq(dst); }
@@ -772,6 +816,8 @@ class V8_EXPORT_PRIVATE MacroAssembler
 
   // ---------------------------------------------------------------------------
   // V8 Sandbox support
+
+  //void InstrumentLoad(Operand to_be_loaded, uint8_t load_width);
 
   // Transform a SandboxedPointer from/to its encoded form, which is used when
   // the pointer is stored on the heap and ensures that the pointer will always

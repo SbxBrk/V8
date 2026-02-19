@@ -16,6 +16,7 @@
 #include "src/compiler/machine-operator.h"
 #include "src/compiler/node-matchers.h"
 #include "src/compiler/node.h"
+#include "src/compiler/opcodes.h"
 #include "src/compiler/operator.h"
 #include "src/compiler/simplified-operator.h"
 #include "src/compiler/turbofan-graph.h"
@@ -132,6 +133,11 @@ class V8_EXPORT_PRIVATE RawMachineAssembler {
     return AddNode(common()->Projection(index), a);
   }
 
+  // TNode<Uint8T> LoadUint8(TNode<RawPtrT> data_pointer, TNode<UintPtrT> offset) {
+  //   return UncheckedCast<Uint8T>(
+  //       Load(MachineType::Uint8(), data_pointer, offset));
+  // }
+
   // Memory Operations.
   Node* Load(MachineType type, Node* base) {
     return Load(type, base, IntPtrConstant(0));
@@ -170,6 +176,7 @@ class V8_EXPORT_PRIVATE RawMachineAssembler {
   Node* LoadFromObject(MachineType type, Node* base, Node* offset) {
     DCHECK_IMPLIES(V8_MAP_PACKING_BOOL && IsMapOffsetConstantMinusTag(offset),
                    type == MachineType::MapInHeader());
+
     ObjectAccess access = {type, WriteBarrierKind::kNoWriteBarrier};
     Node* load = AddNode(simplified()->LoadFromObject(access), base, offset);
     return load;

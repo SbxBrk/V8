@@ -93,7 +93,7 @@ class Label {
     DCHECK(is_bound());
   }
   void link_to(int pos, Distance distance = kFar) {
-    if (distance == kNear) {
+    if (false && distance == kNear) {
       near_link_pos_ = pos + 1;
       DCHECK(is_near_linked());
     } else {

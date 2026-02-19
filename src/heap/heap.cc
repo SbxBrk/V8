@@ -4432,6 +4432,26 @@ bool Heap::InSpaceSlow(Address addr, AllocationSpace space) const {
   UNREACHABLE();
 }
 
+std::optional<AllocationSpace> Heap::GetAllocationSpace(Address addr) const {
+  if (!HasBeenSetUp()) return std::nullopt;
+
+  if (new_space_->ContainsSlow(addr)) return new_space_->identity();
+  if (old_space_->ContainsSlow(addr)) return old_space_->identity();
+  if (code_space_->ContainsSlow(addr)) return code_space_->identity();
+  if (shared_space_->ContainsSlow(addr)) return shared_space_->identity();
+  if (trusted_space_->ContainsSlow(addr)) return trusted_space_->identity();
+  if (shared_trusted_space_->ContainsSlow(addr)) return shared_trusted_space_->identity();
+  if (lo_space_->ContainsSlow(addr)) return lo_space_->identity();
+  if (code_lo_space_->ContainsSlow(addr)) return code_lo_space_->identity();
+  if (new_lo_space_->ContainsSlow(addr)) return new_lo_space_->identity();
+  if (shared_lo_space_->ContainsSlow(addr)) return shared_lo_space_->identity();
+  if (shared_trusted_lo_space_->ContainsSlow(addr)) return shared_trusted_lo_space_->identity();
+  if (trusted_lo_space_->ContainsSlow(addr)) return trusted_lo_space_->identity();
+  if (read_only_space_->ContainsSlow(addr)) return read_only_space_->identity();
+
+  return std::nullopt; // Address does not belong to any known space
+}
+
 bool Heap::IsValidAllocationSpace(AllocationSpace space) {
   switch (space) {
     case NEW_SPACE:

@@ -61,7 +61,7 @@ char* itoa_r(intptr_t i, char* buf, size_t sz, int base, size_t padding);
 namespace {
 
 volatile sig_atomic_t in_signal_handler = 0;
-bool dump_stack_in_signal_handler = true;
+bool dump_stack_in_signal_handler = false;
 
 // The prefix used for mangled symbols, per the Itanium C++ ABI:
 // http://www.codesourcery.com/cxx-abi/abi.html#mangling
@@ -364,6 +364,7 @@ bool EnableInProcessStackDumping() {
   action.sa_sigaction = &StackDumpSignalHandler;
   sigemptyset(&action.sa_mask);
 
+#if 0
   success &= (sigaction(SIGILL, &action, nullptr) == 0);
   success &= (sigaction(SIGABRT, &action, nullptr) == 0);
   success &= (sigaction(SIGFPE, &action, nullptr) == 0);
@@ -372,6 +373,7 @@ bool EnableInProcessStackDumping() {
   success &= (sigaction(SIGSYS, &action, nullptr) == 0);
 
   dump_stack_in_signal_handler = true;
+#endif
 
   return success;
 }

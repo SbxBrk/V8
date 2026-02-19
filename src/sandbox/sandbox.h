@@ -5,12 +5,17 @@
 #ifndef V8_SANDBOX_SANDBOX_H_
 #define V8_SANDBOX_SANDBOX_H_
 
+#include <cstdint>
 #include "include/v8-internal.h"
 #include "include/v8-platform.h"
 #include "include/v8config.h"
 #include "src/base/bounds.h"
 #include "src/common/globals.h"
 #include "testing/gtest/include/gtest/gtest_prod.h"  // nogncheck
+
+extern "C" uintptr_t __fuzzer_heap_sandbox_base;
+extern "C" void __fuzzer_report_heap_sandbox_layout(uintptr_t, size_t);
+extern "C" void __fuzzer_before_heap_sandbox_load(uint64_t, uintptr_t, size_t);
 
 namespace v8 {
 namespace internal {

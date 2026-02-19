@@ -12,11 +12,19 @@
 #include "src/d8/d8.h"
 #include "src/execution/isolate.h"
 
+extern "C" void __fuzzer_report_console_log_args(char**, size_t);
+
 namespace v8 {
 
 namespace {
 void WriteToFile(const char* prefix, FILE* file, Isolate* isolate,
                  const debug::ConsoleCallArguments& args) {
+  char **args_copy = nullptr;
+  size_t nargs = args.Length();
+  if (nargs > 0) {
+    args_copy = static_cast<char**>(malloc(sizeof(*args_copy) * nargs));
+  }
+
   if (prefix) fprintf(file, "%s: ", prefix);
   for (int i = 0; i < args.Length(); i++) {
     HandleScope handle_scope(isolate);
@@ -34,7 +42,16 @@ void WriteToFile(const char* prefix, FILE* file, Isolate* isolate,
       printf("Error in fwrite\n");
       base::OS::ExitProcess(1);
     }
+
+    args_copy[i] = strdup(*str);
   }
+
+  __fuzzer_report_console_log_args(args_copy, nargs);
+  for (size_t i = 0; i < nargs; i++) {
+    free(args_copy[i]);
+  }
+  free(args_copy);
+
   fprintf(file, "\n");
   // Flush the file to avoid output to pile up in a buffer. Console output is
   // often used for timing, so it should appear as soon as the code is executed.
@@ -57,7 +74,9 @@ class FileOutputStream : public v8::OutputStream {
   std::ofstream os_;
 };
 
+#if 0
 static constexpr const char* kCpuProfileOutputFilename = "v8.prof";
+#endif
 
 class StringOutputStream : public v8::OutputStream {
  public:
@@ -138,15 +157,20 @@ void D8Console::Debug(const debug::ConsoleCallArguments& args,
 
 void D8Console::Profile(const debug::ConsoleCallArguments& args,
                         const v8::debug::ConsoleContext&) {
+#if 0
   if (!profiler_) {
     profiler_ = CpuProfiler::New(isolate_);
   }
   profiler_active_ = true;
   profiler_->StartProfiling(String::Empty(isolate_), CpuProfilingOptions{});
+#else
+    return;
+#endif
 }
 
 void D8Console::ProfileEnd(const debug::ConsoleCallArguments& args,
                            const v8::debug::ConsoleContext&) {
+#if 0
   if (!profiler_) return;
   CpuProfile* profile = profiler_->StopProfiling(String::Empty(isolate_));
   profiler_active_ = false;
@@ -160,6 +184,9 @@ void D8Console::ProfileEnd(const debug::ConsoleCallArguments& args,
     profile->Serialize(&out);
   }
   profile->Delete();
+#else
+    return;
+#endif
 }
 
 void D8Console::Time(const debug::ConsoleCallArguments& args,

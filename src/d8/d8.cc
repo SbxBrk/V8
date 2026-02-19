@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <fstream>
 #include <iomanip>
 #include <iterator>
@@ -120,6 +121,9 @@
 #ifndef CHECK
 #define CHECK(condition) assert(condition)
 #endif
+
+// Allow for mapping the input directly via shared memory.
+__AFL_FUZZ_INIT()
 
 namespace v8 {
 
@@ -3806,12 +3810,16 @@ Local<ObjectTemplate> Shell::CreateGlobalTemplate(Isolate* isolate) {
   if (!options.omit_quit) {
     global_template->Set(isolate, "quit", FunctionTemplate::New(isolate, Quit));
   }
+#if 0
   global_template->Set(isolate, "testRunner",
                        Shell::CreateTestRunnerTemplate(isolate));
+#endif
   global_template->Set(isolate, "Realm", Shell::CreateRealmTemplate(isolate));
   global_template->Set(isolate, "performance",
                        Shell::CreatePerformanceTemplate(isolate));
-  global_template->Set(isolate, "Worker", Shell::CreateWorkerTemplate(isolate));
+  if(getenv("FUZZER_ENABLE_WORKER_API")) {
+    global_template->Set(isolate, "Worker", Shell::CreateWorkerTemplate(isolate));
+  }
 
   // Prevent fuzzers from creating side effects.
   if (!i::v8_flags.fuzzing) {
@@ -4036,16 +4044,6 @@ Local<ObjectTemplate> Shell::CreateD8Template(Isolate* isolate) {
         FunctionTemplate::New(isolate, SerializerDeserialize, Local<Value>(),
                               Local<Signature>(), 1));
     d8_template->Set(isolate, "serializer", serializer_template);
-  }
-  {
-    Local<ObjectTemplate> profiler_template = ObjectTemplate::New(isolate);
-    profiler_template->Set(
-        isolate, "setOnProfileEndListener",
-        FunctionTemplate::New(isolate, ProfilerSetOnProfileEndListener));
-    profiler_template->Set(
-        isolate, "triggerSample",
-        FunctionTemplate::New(isolate, ProfilerTriggerSample));
-    d8_template->Set(isolate, "profiler", profiler_template);
   }
 #ifdef V8_ENABLE_CONTINUATION_PRESERVED_EMBEDDER_DATA
   d8_template->Set(
@@ -4851,6 +4849,22 @@ bool ends_with(const char* input, const char* suffix) {
 
 bool SourceGroup::Execute(Isolate* isolate) {
   bool success = true;
+  if (__fuzzer_js_file) {
+    HandleScope handle_scope(isolate);
+    Local<String> file_name =
+        String::NewFromUtf8(isolate, "fuzzcode.js", NewStringType::kNormal)
+            .ToLocalChecked();
+    Local<String> source =
+        String::NewFromUtf8(isolate, __fuzzer_js_file, NewStringType::kNormal)
+            .ToLocalChecked();
+    __fuzzer_js_file = nullptr;
+    Shell::set_script_executed();
+    if (!Shell::ExecuteString(isolate, source, file_name,
+                              Shell::kReportExceptions)) {
+      return false;
+    }
+  }
+
 #ifdef V8_FUZZILLI
   if (fuzzilli_reprl) {
     HandleScope handle_scope(isolate);
@@ -6342,7 +6356,44 @@ void d8_install_sigterm_handler() {
 
 }  // namespace
 
+
+#define DEFER_SIG "##SIG_AFL_DEFER_FORKSRV##"
+
+extern "C" bool __fuzzer_is_in_child;
+
+// Enter the fork server logic. From this function, only the forked childs
+// will return.
+void __place_forkserver() {
+  // TODO: __AFL_COVERAGE_DISCARD();
+  __attribute__((visibility("default")))
+  void _I(void) __asm__("__afl_manual_init");
+  _I();
+  __fuzzer_is_in_child = true;
+}
+
+
 int Shell::Main(int argc, char* argv[]) {
+  // Signature that marks this binary as using the defered fork server schema.
+  static volatile const char *_A __attribute__((used,unused));
+  _A = (const char*) DEFER_SIG;
+
+  auto fuzzer_attached = getenv("FUZZER_IS_PRESENT");
+  __fuzzer_init(fuzzer_attached, __place_forkserver);
+
+  if (fuzzer_attached) {
+    // ? We need the fuzzing input here, since the callback from our custom builtin will
+    // ? trigger a call to `__place_forkserver`. However, the call to __afl_manual_init
+    // ? is the one that would typically map the fuzzing input buffer that we need access to here.
+    __fuzzer_report_afl_input_buffer_and_size_address(__AFL_FUZZ_TESTCASE_BUF, __afl_fuzz_len, __place_forkserver);
+  } else {
+    __fuzzer_try_load_input_from_environment();
+  }
+
+#if defined(V8_ENABLE_PARTITION_ALLOC)
+#if PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+  allocator_shim::ConfigurePartitionsForTesting();
+#endif  // PA_BUILDFLAG(USE_PARTITION_ALLOC_AS_MALLOC)
+#endif
   v8::base::EnsureConsoleOutput();
   if (!SetOptions(argc, argv)) return 1;
   if (!i::v8_flags.fuzzing) d8_install_sigterm_handler();

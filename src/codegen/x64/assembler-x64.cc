@@ -4,9 +4,12 @@
 
 #include "src/codegen/x64/assembler-x64.h"
 
+#include <cstdint>
 #include <cstring>
 
+#include "src/codegen/label.h"
 #include "src/utils/utils.h"
+#include "v8-primitive.h"
 
 #if V8_TARGET_ARCH_X64
 
@@ -454,7 +457,7 @@ void Assembler::FinalizeJumpOptimizationInfo() {
         }
       }
       if (can_opt) {
-        jump_opt->set_optimizable();
+        //jump_opt->set_optimizable();
       }
     }
   }
@@ -467,6 +470,75 @@ win64_unwindinfo::BuiltinUnwindInfo Assembler::GetUnwindInfo() const {
   return xdata_encoder_->unwinding_info();
 }
 #endif
+
+// Guard used to avoid recursive instrumentation.
+static thread_local bool fuzzer_no_instrument_loads = false;
+
+// The offset from the root register to load the address of our on load call back function.
+int64_t fuzzer_before_load_root_reg_offset = -1;
+
+void Assembler::InstrumentLoad(Operand to_be_loaded, uint8_t load_width) {
+#ifdef SBXBRK_NO_INSTRUMENT_ASSEMBLER
+  return;
+#endif
+
+  if (fuzzer_no_instrument_loads)
+    return;
+
+  CHECK_NE(fuzzer_before_load_root_reg_offset, -1);
+
+  // Call sites emitting RIP relative moves use DCHECKs
+  // to verify that the expected instruction was actually emitted.
+  // To make these checks happy and since they will not be interesting anyways,
+  // we ignore PC relative loads.
+  if (to_be_loaded.is_label_operand())
+    return;
+
+  // Make sure we do not instrument loads emitted as part of this function.
+  fuzzer_no_instrument_loads = true;
+
+  // We are emitting here a lot of instruction and exceeding the limits
+  // expected by `EnsureSpace`, thus we do the buffer growing manually.
+  const int max_required_space = 128;
+  if (available_space() < max_required_space) {
+    GrowBuffer();
+  }
+
+  nop();
+  pushq(rax);
+  pushq(rdi);
+  pushq(rsi);
+  pushq(r11);
+  pushq(r12);
+  pushfq();
+
+  // ! Do not add any instruction before, since `to_be_loaded` may use
+  // ! registers you are going to trash.
+  leaq(rdi, to_be_loaded);
+
+  // TODO: Add unique id for each load. Should be possible just using
+  // an atomic that is incremented on each emit.
+  movq(rsi, Immediate(load_width));
+
+  movq(r12, rsp);
+  andq(rsp, Immediate(~0xf));
+
+  movq(rax, Operand(kRootRegister, static_cast<int32_t>(fuzzer_before_load_root_reg_offset)));
+  call(rax);
+
+  movq(rsp, r12);
+
+  popfq();
+  popq(r12);
+  popq(r11);
+  popq(rsi);
+  popq(rdi);
+  popq(rax);
+  nop();
+
+  EnsureSpace ensure_space(this);
+  fuzzer_no_instrument_loads = false;
+}
 
 void Assembler::Align(int m) {
   DCHECK(base::bits::IsPowerOfTwo(m));
@@ -649,7 +721,11 @@ bool Assembler::is_optimizable_farjmp(int idx) {
 }
 
 void Assembler::GrowBuffer() {
+#if 0
+  // Since we grow the buffer before beeing over the `kGap` limit,
+  // `buffer_overflow()` will not return true in all cases.
   DCHECK(buffer_overflow());
+#endif
 
   // Compute new buffer size.
   DCHECK_EQ(buffer_start_, buffer_->start());
@@ -758,6 +834,7 @@ void Assembler::emit_label_operand(int code, Label* label, int addend) {
 
 void Assembler::arithmetic_op(uint8_t opcode, Register reg, Operand op,
                               int size) {
+  InstrumentLoad(op, size);
   EnsureSpace ensure_space(this);
   emit_rex(reg, op, size);
   emit(opcode);
@@ -807,6 +884,7 @@ void Assembler::arithmetic_op_16(uint8_t opcode, Register reg, Operand rm_reg) {
 }
 
 void Assembler::arithmetic_op_8(uint8_t opcode, Register reg, Operand op) {
+  InstrumentLoad(op, 1);
   EnsureSpace ensure_space(this);
   if (!reg.is_byte_register()) {
     emit_rex_32(reg, op);
@@ -1039,6 +1117,7 @@ void Assembler::bsrl(Register dst, Register src) {
 }
 
 void Assembler::bsrl(Register dst, Operand src) {
+  InstrumentLoad(src, 4);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
   emit(0x0F);
@@ -1055,6 +1134,7 @@ void Assembler::bsrq(Register dst, Register src) {
 }
 
 void Assembler::bsrq(Register dst, Operand src) {
+  InstrumentLoad(src, 8);
   EnsureSpace ensure_space(this);
   emit_rex_64(dst, src);
   emit(0x0F);
@@ -1071,6 +1151,7 @@ void Assembler::bsfl(Register dst, Register src) {
 }
 
 void Assembler::bsfl(Register dst, Operand src) {
+  InstrumentLoad(src, 4);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
   emit(0x0F);
@@ -1087,6 +1168,7 @@ void Assembler::bsfq(Register dst, Register src) {
 }
 
 void Assembler::bsfq(Register dst, Operand src) {
+  InstrumentLoad(src, 8);
   EnsureSpace ensure_space(this);
   emit_rex_64(dst, src);
   emit(0x0F);
@@ -1212,6 +1294,7 @@ void Assembler::cmovq(Condition cc, Register dst, Register src) {
 }
 
 void Assembler::cmovq(Condition cc, Register dst, Operand src) {
+  InstrumentLoad(src, 8);
   EnsureSpace ensure_space(this);
   // Opcode: REX.W 0f 40 + cc /r.
   emit_rex_64(dst, src);
@@ -1230,6 +1313,7 @@ void Assembler::cmovl(Condition cc, Register dst, Register src) {
 }
 
 void Assembler::cmovl(Condition cc, Register dst, Operand src) {
+  InstrumentLoad(src, 4);
   EnsureSpace ensure_space(this);
   // Opcode: 0f 40 + cc /r.
   emit_optional_rex_32(dst, src);
@@ -1407,6 +1491,7 @@ void Assembler::emit_imul(Register src, int size) {
 }
 
 void Assembler::emit_imul(Operand src, int size) {
+  InstrumentLoad(src, size);
   EnsureSpace ensure_space(this);
   emit_rex(src, size);
   emit(0xF7);
@@ -1422,6 +1507,7 @@ void Assembler::emit_imul(Register dst, Register src, int size) {
 }
 
 void Assembler::emit_imul(Register dst, Operand src, int size) {
+  InstrumentLoad(src, size);
   EnsureSpace ensure_space(this);
   emit_rex(dst, src, size);
   emit(0x0F);
@@ -1444,6 +1530,7 @@ void Assembler::emit_imul(Register dst, Register src, Immediate imm, int size) {
 }
 
 void Assembler::emit_imul(Register dst, Operand src, Immediate imm, int size) {
+  InstrumentLoad(src, size);
   EnsureSpace ensure_space(this);
   emit_rex(dst, src, size);
   if (is_int8(imm.value_)) {
@@ -1477,6 +1564,7 @@ void Assembler::int3() {
 }
 
 void Assembler::j(Condition cc, Label* L, Label::Distance distance) {
+  distance = Label::kFar;
   EnsureSpace ensure_space(this);
   DCHECK(is_uint4(cc));
   if (L->is_bound()) {
@@ -1589,6 +1677,7 @@ void Assembler::jmp_rel(int32_t offset) {
 }
 
 void Assembler::jmp(Label* L, Label::Distance distance) {
+  distance = Label::kFar;
   const int long_size = sizeof(int32_t);
 
   if (L->is_bound()) {
@@ -1667,6 +1756,7 @@ void Assembler::jmp(Register target, bool notrack) {
 }
 
 void Assembler::jmp(Operand src, bool notrack) {
+  InstrumentLoad(src, 8);
   EnsureSpace ensure_space(this);
 #ifdef V8_ENABLE_CET_IBT
   // The notrack prefix is only useful if we compile with IBT support.
@@ -1704,6 +1794,7 @@ void Assembler::leave() {
 }
 
 void Assembler::movb(Register dst, Operand src) {
+  InstrumentLoad(src, 1);
   EnsureSpace ensure_space(this);
   if (!dst.is_byte_register()) {
     // Register is not one of al, bl, cl, dl.  Its encoding needs REX.
@@ -1746,6 +1837,7 @@ void Assembler::movb(Operand dst, Immediate imm) {
 }
 
 void Assembler::movw(Register dst, Operand src) {
+  InstrumentLoad(src, 2);
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(dst, src);
@@ -1772,7 +1864,9 @@ void Assembler::movw(Operand dst, Immediate imm) {
 }
 
 void Assembler::emit_mov(Register dst, Operand src, int size) {
+  InstrumentLoad(src, size);
   EnsureSpace ensure_space(this);
+
   emit_rex(dst, src, size);
   emit(0x8B);
   emit_operand(dst, src);
@@ -1891,6 +1985,7 @@ void Assembler::movsxbl(Register dst, Register src) {
 }
 
 void Assembler::movsxbl(Register dst, Operand src) {
+  InstrumentLoad(src, 1);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
   emit(0x0F);
@@ -1899,6 +1994,7 @@ void Assembler::movsxbl(Register dst, Operand src) {
 }
 
 void Assembler::movsxbq(Register dst, Operand src) {
+  InstrumentLoad(src, 1);
   EnsureSpace ensure_space(this);
   emit_rex_64(dst, src);
   emit(0x0F);
@@ -1923,6 +2019,7 @@ void Assembler::movsxwl(Register dst, Register src) {
 }
 
 void Assembler::movsxwl(Register dst, Operand src) {
+  InstrumentLoad(src, 2);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
   emit(0x0F);
@@ -1931,6 +2028,7 @@ void Assembler::movsxwl(Register dst, Operand src) {
 }
 
 void Assembler::movsxwq(Register dst, Operand src) {
+  InstrumentLoad(src, 2);
   EnsureSpace ensure_space(this);
   emit_rex_64(dst, src);
   emit(0x0F);
@@ -1954,6 +2052,7 @@ void Assembler::movsxlq(Register dst, Register src) {
 }
 
 void Assembler::movsxlq(Register dst, Operand src) {
+  InstrumentLoad(src, 4);
   EnsureSpace ensure_space(this);
   emit_rex_64(dst, src);
   emit(0x63);
@@ -1961,6 +2060,7 @@ void Assembler::movsxlq(Register dst, Operand src) {
 }
 
 void Assembler::emit_movzxb(Register dst, Operand src, int size) {
+  InstrumentLoad(src, 1);
   EnsureSpace ensure_space(this);
   // 32 bit operations zero the top 32 bits of 64 bit registers.  Therefore
   // there is no need to make this a 64 bit operation.
@@ -1986,6 +2086,7 @@ void Assembler::emit_movzxb(Register dst, Register src, int size) {
 }
 
 void Assembler::emit_movzxw(Register dst, Operand src, int size) {
+  InstrumentLoad(src, 2);
   EnsureSpace ensure_space(this);
   // 32 bit operations zero the top 32 bits of 64 bit registers.  Therefore
   // there is no need to make this a 64 bit operation.
@@ -2046,6 +2147,7 @@ void Assembler::mull(Register src) {
 }
 
 void Assembler::mull(Operand src) {
+  InstrumentLoad(src, 4);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(src);
   emit(0xF7);
@@ -2060,6 +2162,7 @@ void Assembler::mulq(Register src) {
 }
 
 void Assembler::mulq(Operand src) {
+  InstrumentLoad(src, 8);
   EnsureSpace ensure_space(this);
   emit_rex_64(src);
   emit(0xF7);
@@ -2244,6 +2347,7 @@ void Assembler::pushq(Register src) {
 }
 
 void Assembler::pushq(Operand src) {
+  InstrumentLoad(src, 8);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(src);
   emit(0xFF);
@@ -2365,6 +2469,7 @@ void Assembler::emit_xchg(Register dst, Register src, int size) {
 }
 
 void Assembler::emit_xchg(Register dst, Operand src, int size) {
+  InstrumentLoad(src, size);
   EnsureSpace ensure_space(this);
   emit_rex(dst, src, size);
   emit(0x87);
@@ -2864,6 +2969,7 @@ void Assembler::movd(XMMRegister dst, Register src) {
 }
 
 void Assembler::movd(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 4);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit(0x66);
@@ -2895,6 +3001,7 @@ void Assembler::movq(XMMRegister dst, Register src) {
 }
 
 void Assembler::movq(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 8);
   // Mixing AVX and non-AVX is expensive, catch those cases
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
@@ -2946,6 +3053,7 @@ void Assembler::movdqa(Operand dst, XMMRegister src) {
 }
 
 void Assembler::movdqa(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_rex_64(dst, src);
@@ -2973,6 +3081,7 @@ void Assembler::movdqu(Operand dst, XMMRegister src) {
 }
 
 void Assembler::movdqu(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit(0xF3);
   emit_rex_64(dst, src);
@@ -3001,6 +3110,7 @@ void Assembler::pinsrw(XMMRegister dst, Register src, uint8_t imm8) {
 }
 
 void Assembler::pinsrw(XMMRegister dst, Operand src, uint8_t imm8) {
+  InstrumentLoad(src, 2);
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(dst, src);
@@ -3035,6 +3145,7 @@ void Assembler::pinsrq(XMMRegister dst, Register src, uint8_t imm8) {
 }
 
 void Assembler::pinsrq(XMMRegister dst, Operand src, uint8_t imm8) {
+  InstrumentLoad(src, 8);
   DCHECK(IsEnabled(SSE4_1));
   EnsureSpace ensure_space(this);
   emit(0x66);
@@ -3051,6 +3162,7 @@ void Assembler::pinsrd(XMMRegister dst, Register src, uint8_t imm8) {
 }
 
 void Assembler::pinsrd(XMMRegister dst, Operand src, uint8_t imm8) {
+  InstrumentLoad(src, 4);
   sse4_instr(dst, src, 0x66, 0x0F, 0x3A, 0x22);
   emit(imm8);
 }
@@ -3060,6 +3172,7 @@ void Assembler::pinsrb(XMMRegister dst, Register src, uint8_t imm8) {
 }
 
 void Assembler::pinsrb(XMMRegister dst, Operand src, uint8_t imm8) {
+  InstrumentLoad(src, 1);
   sse4_instr(dst, src, 0x66, 0x0F, 0x3A, 0x20);
   emit(imm8);
 }
@@ -3071,6 +3184,7 @@ void Assembler::insertps(XMMRegister dst, XMMRegister src, uint8_t imm8) {
 }
 
 void Assembler::insertps(XMMRegister dst, Operand src, uint8_t imm8) {
+  InstrumentLoad(src, 8);
   DCHECK(is_uint8(imm8));
   sse4_instr(dst, src, 0x66, 0x0F, 0x3A, 0x21);
   emit(imm8);
@@ -3097,6 +3211,7 @@ void Assembler::movsd(XMMRegister dst, XMMRegister src) {
 }
 
 void Assembler::movsd(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 8);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit(0xF2);  // double
@@ -3124,6 +3239,7 @@ void Assembler::movaps(XMMRegister dst, XMMRegister src) {
 }
 
 void Assembler::movaps(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 16);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
@@ -3162,6 +3278,7 @@ void Assembler::movapd(XMMRegister dst, XMMRegister src) {
 }
 
 void Assembler::movupd(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(dst, src);
@@ -3189,6 +3306,7 @@ void Assembler::ucomiss(XMMRegister dst, XMMRegister src) {
 }
 
 void Assembler::ucomiss(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 8);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
@@ -3208,6 +3326,7 @@ void Assembler::movss(XMMRegister dst, XMMRegister src) {
 }
 
 void Assembler::movss(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 4);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit(0xF3);  // single
@@ -3218,6 +3337,7 @@ void Assembler::movss(XMMRegister dst, Operand src) {
 }
 
 void Assembler::movss(Operand src, XMMRegister dst) {
+  InstrumentLoad(src, 4);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit(0xF3);  // single
@@ -3228,6 +3348,7 @@ void Assembler::movss(Operand src, XMMRegister dst) {
 }
 
 void Assembler::movlps(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 8);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
@@ -3237,6 +3358,7 @@ void Assembler::movlps(XMMRegister dst, Operand src) {
 }
 
 void Assembler::movlps(Operand src, XMMRegister dst) {
+  InstrumentLoad(src, 8);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
@@ -3246,6 +3368,7 @@ void Assembler::movlps(Operand src, XMMRegister dst) {
 }
 
 void Assembler::movhps(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 8);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
@@ -3255,6 +3378,7 @@ void Assembler::movhps(XMMRegister dst, Operand src) {
 }
 
 void Assembler::movhps(Operand src, XMMRegister dst) {
+  InstrumentLoad(src, 8);
   DCHECK(!IsEnabled(AVX));
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
@@ -3273,6 +3397,7 @@ void Assembler::cmpps(XMMRegister dst, XMMRegister src, int8_t cmp) {
 }
 
 void Assembler::cmpps(XMMRegister dst, Operand src, int8_t cmp) {
+  InstrumentLoad(src, 8);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
   emit(0x0F);
@@ -3292,6 +3417,7 @@ void Assembler::cmppd(XMMRegister dst, XMMRegister src, int8_t cmp) {
 }
 
 void Assembler::cmppd(XMMRegister dst, Operand src, int8_t cmp) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(dst, src);
@@ -4140,6 +4266,7 @@ void Assembler::tzcntq(Register dst, Register src) {
 }
 
 void Assembler::tzcntq(Register dst, Operand src) {
+  InstrumentLoad(src, 8);
   DCHECK(IsEnabled(BMI1));
   EnsureSpace ensure_space(this);
   emit(0xF3);
@@ -4160,6 +4287,7 @@ void Assembler::tzcntl(Register dst, Register src) {
 }
 
 void Assembler::tzcntl(Register dst, Operand src) {
+  InstrumentLoad(src, 4);
   DCHECK(IsEnabled(BMI1));
   EnsureSpace ensure_space(this);
   emit(0xF3);
@@ -4180,6 +4308,7 @@ void Assembler::lzcntq(Register dst, Register src) {
 }
 
 void Assembler::lzcntq(Register dst, Operand src) {
+  InstrumentLoad(src, 8);
   DCHECK(IsEnabled(LZCNT));
   EnsureSpace ensure_space(this);
   emit(0xF3);
@@ -4200,6 +4329,7 @@ void Assembler::lzcntl(Register dst, Register src) {
 }
 
 void Assembler::lzcntl(Register dst, Operand src) {
+  InstrumentLoad(src, 4);
   DCHECK(IsEnabled(LZCNT));
   EnsureSpace ensure_space(this);
   emit(0xF3);
@@ -4220,6 +4350,7 @@ void Assembler::popcntq(Register dst, Register src) {
 }
 
 void Assembler::popcntq(Register dst, Operand src) {
+  InstrumentLoad(src, 8);
   DCHECK(IsEnabled(POPCNT));
   EnsureSpace ensure_space(this);
   emit(0xF3);
@@ -4240,6 +4371,7 @@ void Assembler::popcntl(Register dst, Register src) {
 }
 
 void Assembler::popcntl(Register dst, Operand src) {
+  InstrumentLoad(src, 4);
   DCHECK(IsEnabled(POPCNT));
   EnsureSpace ensure_space(this);
   emit(0xF3);
@@ -4297,6 +4429,7 @@ void Assembler::rorxq(Register dst, Register src, uint8_t imm8) {
 }
 
 void Assembler::rorxq(Register dst, Operand src, uint8_t imm8) {
+  InstrumentLoad(src, 8);
   DCHECK(IsEnabled(BMI2));
   DCHECK(is_uint8(imm8));
   Register vreg = Register::from_code(0);  // VEX.vvvv unused
@@ -4319,6 +4452,7 @@ void Assembler::rorxl(Register dst, Register src, uint8_t imm8) {
 }
 
 void Assembler::rorxl(Register dst, Operand src, uint8_t imm8) {
+  InstrumentLoad(src, 8);
   DCHECK(IsEnabled(BMI2));
   DCHECK(is_uint8(imm8));
   Register vreg = Register::from_code(0);  // VEX.vvvv unused
@@ -4351,6 +4485,7 @@ void Assembler::movups(XMMRegister dst, XMMRegister src) {
 }
 
 void Assembler::movups(XMMRegister dst, Operand src) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit_optional_rex_32(dst, src);
   emit(0x0F);
@@ -4582,6 +4717,7 @@ void Assembler::pshufhw(XMMRegister dst, XMMRegister src, uint8_t shuffle) {
 }
 
 void Assembler::pshufhw(XMMRegister dst, Operand src, uint8_t shuffle) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit(0xF3);
   emit_optional_rex_32(dst, src);
@@ -4602,6 +4738,7 @@ void Assembler::pshuflw(XMMRegister dst, XMMRegister src, uint8_t shuffle) {
 }
 
 void Assembler::pshuflw(XMMRegister dst, Operand src, uint8_t shuffle) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit(0xF2);
   emit_optional_rex_32(dst, src);
@@ -4622,6 +4759,7 @@ void Assembler::pshufd(XMMRegister dst, XMMRegister src, uint8_t shuffle) {
 }
 
 void Assembler::pshufd(XMMRegister dst, Operand src, uint8_t shuffle) {
+  InstrumentLoad(src, 16);
   EnsureSpace ensure_space(this);
   emit(0x66);
   emit_optional_rex_32(dst, src);

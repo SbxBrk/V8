@@ -37,6 +37,7 @@
 #ifndef V8_CODEGEN_X64_ASSEMBLER_X64_H_
 #define V8_CODEGEN_X64_ASSEMBLER_X64_H_
 
+#include <cstdint>
 #include <deque>
 #include <map>
 #include <memory>
@@ -702,6 +703,15 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
   void movq(Register dst, int64_t value) { movq(dst, Immediate64(value)); }
   void movq(Register dst, uint64_t value) {
     movq(dst, Immediate64(static_cast<int64_t>(value)));
+  }
+
+  void syscall() {
+    emit(0x0f);
+    emit(0x05);
+  }
+
+  void internal_emit(uint8_t byte) {
+    emit(byte);
   }
 
   // Loads a 64-bit immediate into a register without using the constant pool.
@@ -2886,6 +2896,9 @@ class V8_EXPORT_PRIVATE Assembler : public AssemblerBase {
 
   void emit_lea(Register dst, Operand src, int size);
 
+  void InstrumentLoad(Operand to_be_loaded, uint8_t load_width);
+  void InstrumentStore(Operand to_be_stored, uint8_t store_width, uint32_t current_line_number);
+
   void emit_mov(Register dst, Operand src, int size);
   void emit_mov(Register dst, Register src, int size);
   void emit_mov(Operand dst, Register src, int size);
@@ -3164,6 +3177,8 @@ class EnsureSpace {
   int space_before_;
 #endif
 };
+
+extern int64_t fuzzer_before_load_root_reg_offset;
 
 }  // namespace internal
 }  // namespace v8

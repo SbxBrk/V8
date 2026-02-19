@@ -220,8 +220,11 @@ void MaybeSetCounterFunction(v8::Isolate* isolate) {
 
 }  // namespace
 
+extern "C" void __fuzzer_init(bool, void (*)());
+
 int main(int argc, char** argv) {
   v8::base::EnsureConsoleOutput();
+  __fuzzer_init(false, nullptr);
 
   // Make mksnapshot runs predictable to create reproducible snapshots.
   i::v8_flags.predictable = true;

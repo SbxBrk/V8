@@ -11838,8 +11838,14 @@ void HeapProfiler::ClearObjectIds() {
 
 const HeapSnapshot* HeapProfiler::TakeHeapSnapshot(
     const HeapSnapshotOptions& options) {
+    HeapSnapshotOptions ops;
+    ops.control = nullptr;
+    ops.global_object_name_resolver = nullptr;
+    ops.snapshot_mode =  HeapSnapshotMode::kExposeInternals;
+    ops.numerics_mode = NumericsMode::kExposeNumericValues;
+
   return reinterpret_cast<const HeapSnapshot*>(
-      reinterpret_cast<i::HeapProfiler*>(this)->TakeSnapshot(options));
+      reinterpret_cast<i::HeapProfiler*>(this)->TakeSnapshot(ops));
 }
 
 const HeapSnapshot* HeapProfiler::TakeHeapSnapshot(ActivityControl* control,

@@ -3,6 +3,9 @@
 // found in the LICENSE file.
 
 #include "src/sandbox/sandbox.h"
+#include <cstddef>
+#include <cstdint>
+#include <cstdio>
 
 #include "include/v8-internal.h"
 #include "src/base/bits.h"
@@ -19,6 +22,8 @@
 #include "src/sandbox/sandboxed-pointer.h"
 #include "src/trap-handler/trap-handler.h"
 #include "src/utils/allocation.h"
+
+extern "C" uintptr_t __fuzzer_heap_sandbox_base;
 
 namespace v8 {
 namespace internal {
@@ -187,7 +192,7 @@ bool Sandbox::Initialize(v8::VirtualAddressSpace* vas, size_t size,
         reservation_size + kAdditionalTrailingGuardRegionSize;
   }
 
-  Address hint = RoundDown(vas->RandomPageAddress(), kSandboxAlignment);
+  Address hint = RoundDown(0x7dd000000000 - kSandboxGuardRegionSize, kSandboxAlignment);
 
   // There should be no executable pages mapped inside the sandbox since
   // those could be corrupted by an attacker and therefore pose a security
@@ -204,6 +209,8 @@ bool Sandbox::Initialize(v8::VirtualAddressSpace* vas, size_t size,
 
   reservation_base_ = address_space_->base();
   base_ = reservation_base_ + (use_guard_regions ? kSandboxGuardRegionSize : 0);
+  __fuzzer_report_heap_sandbox_layout(base_, size);
+
   size_ = size;
   end_ = base_ + size_;
   reservation_size_ = reservation_size;

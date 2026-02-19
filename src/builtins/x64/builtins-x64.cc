@@ -278,13 +278,13 @@ void Builtins::Generate_JSConstructStubGeneric(MacroAssembler* masm) {
   // do a smi check and fall through to check if the return value is a valid
   // receiver.
   __ JumpIfNotRoot(rax, RootIndex::kUndefinedValue, &check_result,
-                   Label::kNear);
+                   Label::kFar);
 
   // Throw away the result of the constructor invocation and use the
   // on-stack receiver as the result.
   __ bind(&use_receiver);
   __ movq(rax, Operand(rsp, 0 * kSystemPointerSize));
-  __ JumpIfRoot(rax, RootIndex::kTheHoleValue, &do_throw, Label::kNear);
+  __ JumpIfRoot(rax, RootIndex::kTheHoleValue, &do_throw, Label::kFar);
 
   __ bind(&leave_and_return);
   // Restore the arguments count.
@@ -854,7 +854,7 @@ void Builtins::Generate_ResumeGeneratorTrampoline(MacroAssembler* masm) {
     __ cmpl(argc, Immediate(JSParameterCount(0)));
     __ j(kGreaterThan, &push_arguments, Label::kNear);
     __ movl(argc, Immediate(JSParameterCount(0)));
-    __ jmp(&done_loop, Label::kNear);
+    __ jmp(&done_loop, Label::kFar);
 #else
     // Generator functions are always created from user code and thus the
     // formal parameter count is never equal to kDontAdaptArgumentsSentinel,
@@ -871,7 +871,7 @@ void Builtins::Generate_ResumeGeneratorTrampoline(MacroAssembler* masm) {
 
     __ bind(&loop);
     __ decl(index);
-    __ j(kLessThan, &done_loop, Label::kNear);
+    __ j(kLessThan, &done_loop, Label::kFar);
     __ PushTaggedField(FieldOperand(params_array, index, times_tagged_size,
                                     OFFSET_OF_DATA_START(FixedArray)),
                        decompr_scratch1);
@@ -1708,7 +1708,7 @@ void Builtins::Generate_InterpreterPushArgsThenFastConstructFunction(
   __ bind(&use_receiver);
   __ movq(rax,
           Operand(rbp, FastConstructFrameConstants::kImplicitReceiverOffset));
-  __ JumpIfRoot(rax, RootIndex::kTheHoleValue, &do_throw, Label::kNear);
+  __ JumpIfRoot(rax, RootIndex::kTheHoleValue, &do_throw, Label::kFar);
 
   __ bind(&leave_and_return);
   __ LeaveFrame(StackFrame::FAST_CONSTRUCT);
@@ -1775,7 +1775,7 @@ static void Generate_InterpreterEnterBytecode(MacroAssembler* masm) {
                    SharedFunctionInfo::kTrustedFunctionDataOffset),
       kUnknownIndirectPointerTag, kScratchRegister);
   __ IsObjectType(rbx, INTERPRETER_DATA_TYPE, kScratchRegister);
-  __ j(not_equal, &builtin_trampoline, Label::kNear);
+  __ j(not_equal, &builtin_trampoline, Label::kFar);
   __ LoadProtectedPointerField(
       rbx, FieldOperand(rbx, InterpreterData::kInterpreterTrampolineOffset));
   __ LoadCodeInstructionStart(rbx, rbx, kJSEntrypointTag);
@@ -2279,12 +2279,12 @@ void Builtins::Generate_ReflectApply(MacroAssembler* masm) {
     __ movq(rdx, rdi);
     __ movq(rbx, rdi);
     __ cmpq(rax, Immediate(JSParameterCount(1)));
-    __ j(below, &done, Label::kNear);
+    __ j(below, &done, Label::kFar);
     __ movq(rdi, args[1]);  // target
-    __ j(equal, &done, Label::kNear);
+    __ j(equal, &done, Label::kFar);
     __ movq(rdx, args[2]);  // thisArgument
     __ cmpq(rax, Immediate(JSParameterCount(3)));
-    __ j(below, &done, Label::kNear);
+    __ j(below, &done, Label::kFar);
     __ movq(rbx, args[3]);  // argumentsList
     __ bind(&done);
     __ DropArgumentsAndPushNewReceiver(rax, rdx, rcx);
@@ -2326,13 +2326,13 @@ void Builtins::Generate_ReflectConstruct(MacroAssembler* masm) {
     __ movq(rdx, rdi);
     __ movq(rbx, rdi);
     __ cmpq(rax, Immediate(JSParameterCount(1)));
-    __ j(below, &done, Label::kNear);
+    __ j(below, &done, Label::kFar);
     __ movq(rdi, args[1]);                     // target
     __ movq(rdx, rdi);                         // new.target defaults to target
-    __ j(equal, &done, Label::kNear);
+    __ j(equal, &done, Label::kFar);
     __ movq(rbx, args[2]);  // argumentsList
     __ cmpq(rax, Immediate(JSParameterCount(3)));
-    __ j(below, &done, Label::kNear);
+    __ j(below, &done, Label::kFar);
     __ movq(rdx, args[3]);  // new.target
     __ bind(&done);
     __ DropArgumentsAndPushNewReceiver(
@@ -2441,7 +2441,7 @@ void Builtins::Generate_CallOrConstructVarargs(MacroAssembler* masm,
 
   Label stack_overflow;
   __ StackOverflowCheck(rcx, &stack_overflow,
-                        DEBUG_BOOL ? Label::kFar : Label::kNear);
+                        DEBUG_BOOL ? Label::kFar : Label::kFar);
 
   // Push additional arguments onto the stack.
   // Move the arguments already in the stack,
@@ -2524,7 +2524,7 @@ void Builtins::Generate_CallOrConstructForwardVarargs(MacroAssembler* masm,
     // -----------------------------------
 
     // Check for stack overflow.
-    __ StackOverflowCheck(r8, &stack_overflow, Label::kNear);
+    __ StackOverflowCheck(r8, &stack_overflow, Label::kFar);
 
     // Forward the arguments from the caller frame.
     // Move the arguments already in the stack,
@@ -2608,15 +2608,15 @@ void Builtins::Generate_CallFunction(MacroAssembler* masm,
       Label convert_to_object, convert_receiver;
       __ movq(rcx, args.GetReceiverOperand());
       __ JumpIfSmi(rcx, &convert_to_object,
-                   DEBUG_BOOL ? Label::kFar : Label::kNear);
+                   DEBUG_BOOL ? Label::kFar : Label::kFar);
       __ JumpIfJSAnyIsNotPrimitive(rcx, rbx, &done_convert,
-                                   DEBUG_BOOL ? Label::kFar : Label::kNear);
+                                   DEBUG_BOOL ? Label::kFar : Label::kFar);
       if (mode != ConvertReceiverMode::kNotNullOrUndefined) {
         Label convert_global_proxy;
         __ JumpIfRoot(rcx, RootIndex::kUndefinedValue, &convert_global_proxy,
-                      DEBUG_BOOL ? Label::kFar : Label::kNear);
+                      DEBUG_BOOL ? Label::kFar : Label::kFar);
         __ JumpIfNotRoot(rcx, RootIndex::kNullValue, &convert_to_object,
-                         DEBUG_BOOL ? Label::kFar : Label::kNear);
+                         DEBUG_BOOL ? Label::kFar : Label::kFar);
         __ bind(&convert_global_proxy);
         {
           // Patch receiver to global proxy.
@@ -2796,7 +2796,7 @@ void Builtins::Generate_Call(MacroAssembler* masm, ConvertReceiverMode mode) {
   // Check if target has a [[Call]] internal method.
   __ testb(FieldOperand(map, Map::kBitFieldOffset),
            Immediate(Map::Bits1::IsCallableBit::kMask));
-  __ j(zero, &non_callable, Label::kNear);
+  __ j(zero, &non_callable, Label::kFar);
 
   // Check if target is a proxy and call CallProxy external builtin
   __ cmpw(instance_type, Immediate(JS_PROXY_TYPE));

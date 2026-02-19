@@ -5439,6 +5439,7 @@ v8_source_set("v8_base_without_compiler") {
     "src/builtins/builtins-weak-refs.cc",
     "src/builtins/builtins.cc",
     "src/builtins/constants-table-builder.cc",
+    "src/builtins/builtins-fuzz.cc",
     "src/codegen/aligned-slot-allocator.cc",
     "src/codegen/assembler.cc",
     "src/codegen/bailout-reason.cc",
@@ -7328,6 +7329,7 @@ if (current_toolchain == v8_generator_toolchain) {
       "src/interpreter/bytecode-traits.h",
       "src/interpreter/bytecodes.cc",
       "src/interpreter/bytecodes.h",
+      "src/fuzzing_dummy.cc",
     ]
 
     configs = [ ":internal_config" ]
@@ -7404,7 +7406,7 @@ if (current_toolchain == v8_snapshot_toolchain) {
   v8_executable("torque") {
     visibility = [ ":*" ]  # Only targets in this file can depend on this.
 
-    sources = [ "src/torque/torque.cc" ]
+    sources = [ "src/torque/torque.cc", "src/fuzzing_dummy.cc" ]
 
     deps = [
       ":torque_base",
@@ -7461,6 +7463,7 @@ if (v8_enable_i18n_support) {
       sources = [
         "src/regexp/gen-regexp-special-case.cc",
         "src/regexp/special-case.h",
+        "src/fuzzing_dummy.cc",
       ]
 
       deps = [

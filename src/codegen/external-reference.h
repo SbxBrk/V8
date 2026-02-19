@@ -483,7 +483,10 @@ enum class IsolateFieldId : uint8_t;
   V(empty_backing_store_buffer, "EmptyBackingStoreBuffer()")      \
   V(code_pointer_table_address,                                   \
     "IsolateGroup::current()->code_pointer_table()")              \
-  V(memory_chunk_metadata_table_address, "MemoryChunkMetadata::Table()")
+  V(memory_chunk_metadata_table_address, "MemoryChunkMetadata::Table()") \
+    V(fuzzer_before_heap_sandbox_load_address, "fuzzer_before_heap_sandbox_load_address()")                 \
+  V(fuzzer_heap_sandbox_base, "fuzzer_heap_sandbox_base()")                 \
+  V(fuzzer_before_heap_sandbox_load_preserve, "fuzzer_before_heap_sandbox_load_preserve()")
 #else
 #define EXTERNAL_REFERENCE_LIST_SANDBOX(V)
 #endif  // V8_ENABLE_SANDBOX

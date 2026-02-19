@@ -9,6 +9,8 @@
 #include "src/base/platform/platform.h"
 #include "src/base/timezone-cache.h"
 
+extern "C" void __fuzzer_on_memory_layout_changed();
+
 namespace v8 {
 namespace base {
 

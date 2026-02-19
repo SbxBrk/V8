@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <unistd.h>
 #include <climits>
 #include <cstdint>
 
@@ -392,9 +393,15 @@ void MacroAssembler::DecompressTaggedSigned(Register destination,
   movl(destination, field_operand);
 }
 
+
+
 void MacroAssembler::DecompressTagged(Register destination,
                                       Operand field_operand) {
   ASM_CODE_COMMENT(this);
+
+  //InstrumentLoad(field_operand, 4);
+
+  // Compute absolute address we are going to load from.
   movl(destination, field_operand);
   addq(destination, kPtrComprCageBaseRegister);
 }
@@ -603,9 +610,9 @@ void MacroAssembler::ResolveIndirectPointerHandle(Register destination,
     // pointer table to use.
     Label is_trusted_pointer_handle, done;
     testl(handle, Immediate(kCodePointerHandleMarker));
-    j(zero, &is_trusted_pointer_handle, Label::kNear);
+    j(zero, &is_trusted_pointer_handle, Label::kFar);
     ResolveCodePointerHandle(destination, handle);
-    jmp(&done, Label::kNear);
+    jmp(&done, Label::kFar);
     bind(&is_trusted_pointer_handle);
     ResolveTrustedPointerHandle(destination, handle,
                                 kUnknownIndirectPointerTag);
@@ -4086,7 +4093,7 @@ void MacroAssembler::InvokeFunctionCode(
       break;
   }
   Label done;
-  jmp(&done, Label::kNear);
+  jmp(&done, Label::kFar);
 
   // Deferred debug hook.
   bind(&debug_hook);

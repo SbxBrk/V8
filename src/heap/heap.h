@@ -1171,6 +1171,8 @@ class Heap final {
   V8_EXPORT_PRIVATE bool InSpace(Tagged<HeapObject> value,
                                  AllocationSpace space) const;
 
+  V8_EXPORT_PRIVATE std::optional<AllocationSpace> GetAllocationSpace(Address addr) const;
+
   // Slow methods that can be used for verification as they can also be used
   // with off-heap Addresses.
   V8_EXPORT_PRIVATE bool InSpaceSlow(Address addr, AllocationSpace space) const;

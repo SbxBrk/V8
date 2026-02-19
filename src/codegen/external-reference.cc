@@ -4,7 +4,9 @@
 
 #include "src/codegen/external-reference.h"
 
+#include <cstdint>
 #include <optional>
+#include "sanitizer/asan_interface.h"
 
 #include "include/v8-fast-api-calls.h"
 #include "src/api/api-inl.h"
@@ -52,6 +54,8 @@
 #include "src/base/strings.h"
 #include "src/objects/intl-objects.h"
 #endif  // V8_INTL_SUPPORT
+
+extern "C" void __asan_storeN(uintptr_t addr, uintptr_t size);
 
 namespace v8 {
 namespace internal {
@@ -292,6 +296,28 @@ ExternalReference ExternalReference::jslimit_address() {
 ExternalReference ExternalReference::handle_scope_implementer_address(
     Isolate* isolate) {
   return ExternalReference(isolate->handle_scope_implementer_address());
+}
+
+static bool test(uint64_t base, uint64_t offset, uint8_t load_width) {
+    printf("load: 0x%lx + 0x%lx (%u bytes)\n", base, offset, load_width);
+    return true;
+}
+
+ExternalReference ExternalReference::fuzzer_before_heap_sandbox_load_address() {
+  return ExternalReference(Address(test));
+}
+
+ExternalReference ExternalReference::fuzzer_heap_sandbox_base() {
+  return ExternalReference(Address(&__fuzzer_heap_sandbox_base));
+}
+
+__attribute__((preserve_all))
+static void __fuzzer_before_heap_sandbox_load_preserve(uintptr_t load_addr, size_t load_access_size) {
+    __fuzzer_before_heap_sandbox_load(0, load_addr, load_access_size);
+}
+
+ExternalReference ExternalReference::fuzzer_before_heap_sandbox_load_preserve() {
+  return ExternalReference(Address(__fuzzer_before_heap_sandbox_load_preserve));
 }
 
 #ifdef V8_ENABLE_SANDBOX

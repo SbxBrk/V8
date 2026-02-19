@@ -26,6 +26,11 @@
 #include "src/handles/global-handles.h"
 #include "src/heap/parked-scope.h"
 
+extern "C" void __fuzzer_init(bool, void (*)());
+extern "C" void __fuzzer_report_afl_input_buffer_and_size_address(unsigned char*, unsigned int *, void (*)());
+extern "C" void __fuzzer_try_load_input_from_environment();
+extern "C" const char* __fuzzer_js_file;
+
 namespace v8 {
 
 class BackingStore;
