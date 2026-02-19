@@ -30,10 +30,17 @@ treat_warnings_as_errors = false
 readonly OUT_DIR=out/fuzzing-build
 
 
-text_red=$(tput setaf 1)    # Red
-text_green=$(tput setaf 2)  # Green
-text_bold=$(tput bold)      # Bold
-text_reset=$(tput sgr0)     # Reset your text
+if [ -t 1 ]; then
+    text_red=$(tput setaf 1)    # Red
+    text_green=$(tput setaf 2)  # Green
+    text_bold=$(tput bold)      # Bold
+    text_reset=$(tput sgr0)     # Reset your text
+else
+    text_red=""
+    text_green=""
+    text_bold=""
+    text_reset=""
+fi
 
 function err {
     echo "${text_bold}${text_red}[!] ${1}${text_reset}"
