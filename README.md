@@ -1,40 +1,22 @@
-V8 JavaScript Engine
-=============
+# V8 (SbxBrk)
 
-V8 is Google's open source JavaScript engine.
+This repository contains a fork of V8 used by [SbxBrk](https://github.com/SbxBrk/SbxBrk) for heap sandbox fuzzing. It includes a custom LLVM pass and build configuration for compiling V8 with fault-injection instrumentation.
 
-V8 implements ECMAScript as specified in ECMA-262.
+## Heap Sandbox Fuzzing Pass
 
-V8 is written in C++ and is used in Google Chrome, the open source
-browser from Google.
+The [`heap_sandbox_fuzzing_pass`](./heap_sandbox_fuzzing_pass/) is a custom LLVM pass that instruments all memory loads whose target may reside inside the V8 heap sandbox. For each such load, the pass inserts a call to `__fuzzer_before_heap_sandbox_load`, which allows the fuzzer runtime to inject faults (via bitmasks) before the loaded data reaches trusted code.
 
-V8 can run standalone, or can be embedded into any C++ application.
+Loads from local variables and globals are statically filtered out to reduce overhead. The pass is compiled as a shared object and loaded into the compilation pipeline via `-fpass-plugin`.
 
-V8 Project page: https://v8.dev/docs
+## Building
 
+V8 must be compiled inside the Docker environment provided by the [main repository](https://github.com/SbxBrk/SbxBrk). AFL++ and the fuzzer runtime must be built first.
 
-Getting the Code
-=============
+```sh
+cd /work/v8-build
+./build.sh
+```
 
-Checkout [depot tools](http://www.chromium.org/developers/how-tos/install-depot-tools), and run
+The [`build.sh`](./build.sh) script handles building the LLVM pass, pulling V8 dependencies, and compiling V8 with ASan, sandbox support, and the fuzzing instrumentation. The resulting `d8` shell is placed at `out/fuzzing-build/d8`.
 
-        fetch v8
-
-This will checkout V8 into the directory `v8` and fetch all of its dependencies.
-To stay up to date, run
-
-        git pull origin
-        gclient sync
-
-For fetching all branches, add the following into your remote
-configuration in `.git/config`:
-
-        fetch = +refs/branch-heads/*:refs/remotes/branch-heads/*
-        fetch = +refs/tags/*:refs/tags/*
-
-
-Contributing
-=============
-
-Please follow the instructions mentioned at
-[v8.dev/docs/contribute](https://v8.dev/docs/contribute).
+For full setup instructions, see the [main repository](https://github.com/SbxBrk/SbxBrk).
